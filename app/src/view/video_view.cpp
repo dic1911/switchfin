@@ -81,12 +81,11 @@ VideoView::VideoView(jellyfin::MediaItem& item) : itemId(item.Id) {
 
     this->addGestureRecognizer(new brls::TapGestureRecognizer(this, [this]() { this->toggleOSD(); }));
     /// 播放/暂停 按钮
-    this->btnToggle->registerClickAction([](...) {
-        auto& mpv = MPVCore::instance();
-        mpv.isPaused() ? mpv.resume() : mpv.pause();
-        return true;
-    });
+    this->btnToggle->registerClickAction([this](...) { return this->togglePlayback(); });
     this->btnToggle->addGestureRecognizer(new brls::TapGestureRecognizer(this->btnToggle));
+    this->registerAction("toggle", brls::ControllerButton::BUTTON_START, [this](...) {
+        return this->togglePlayback();
+    }, true);
 
     /// 播放控制
     this->btnBackward->registerClickAction([this](...) { return this->playNext(-1); });
@@ -574,4 +573,10 @@ void VideoView::onDismiss() {
         Presenter* p = dynamic_cast<Presenter*>(applet->getContentView());
         if (p != nullptr) p->doRequest();
     }
+}
+
+bool VideoView::togglePlayback() {
+    auto& mpv = MPVCore::instance();
+    mpv.isPaused() ? mpv.resume() : mpv.pause();
+    return true;
 }
