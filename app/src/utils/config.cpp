@@ -35,7 +35,7 @@ std::unordered_map<AppConfig::Item, AppConfig::Option> AppConfig::settingMap = {
     {OSD_ON_TOGGLE, {"osd_on_toggle"}},
     {OVERCLOCK, {"overclock"}},
     {PLAYER_BOTTOM_BAR, {"player_bottom_bar"}},
-    {PLAYER_SEEKING_STEP, {"player_seeking_step", {"5", "10", "15", "30"}, {5, 10, 15, 30}}},
+    {PLAYER_SEEKING_STEP, {"player_seeking_step", {"5", "10", "15", "30", "60", "300", "600"}, {5, 10, 15, 30, 60, 300, 600}}},
     {PLAYER_HWDEC, {"player_hwdec"}},
     {PLAYER_HWDEC_CUSTOM, {"player_hwdec_custom"}},
     {TEXTURE_CACHE_NUM, {"texture_cache_num"}},
