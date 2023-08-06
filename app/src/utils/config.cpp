@@ -55,7 +55,7 @@ std::unordered_map<AppConfig::Item, AppConfig::Option> AppConfig::settingMap = {
     {SYNC_SETTING, {"sync_setting"}},
     {OVERCLOCK, {"overclock"}},
     {PLAYER_BOTTOM_BAR, {"player_bottom_bar"}},
-    {PLAYER_SEEKING_STEP, {"player_seeking_step", {"5", "10", "15", "30"}, {5, 10, 15, 30}}},
+    {PLAYER_SEEKING_STEP, {"player_seeking_step", {"5", "10", "15", "30", "60", "300", "600"}, {5, 10, 15, 30, 60, 300, 600}}},
     {PLAYER_LOW_QUALITY, {"player_low_quality"}},
     {PLAYER_INMEMORY_CACHE,
         {
