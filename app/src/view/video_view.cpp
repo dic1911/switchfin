@@ -231,6 +231,9 @@ VideoView::VideoView() {
         return true;
     });
     this->btnToggle->addGestureRecognizer(new brls::TapGestureRecognizer(this->btnToggle));
+    this->registerAction("toggle", brls::ControllerButton::BUTTON_START, [this](...) {
+        return this->togglePlayback();
+    }, true);
 
     /// OSD 锁定按钮
     this->osdLockBox->registerClickAction([this](...) { return this->toggleOSDLock(); });

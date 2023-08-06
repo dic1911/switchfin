@@ -104,6 +104,13 @@ private:
 
     bool toggleDanmaku();
     void refreshDanmakuIcon();
+    /// @brief get video url
+    void playMedia(const time_t seekTicks);
+    bool playNext(int off = 1);
+    void reportStart();
+    void reportStop();
+    void reportPlay(bool isPaused = false);
+    bool togglePlayback();
 
     void registerMpvEvent();
     void unRegisterMpvEvent();
