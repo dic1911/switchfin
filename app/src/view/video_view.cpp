@@ -55,7 +55,7 @@ VideoView::VideoView(jellyfin::MediaItem& item) : itemId(item.Id) {
         false, true);
 
     this->registerAction(
-        "toggleOSD", brls::ControllerButton::BUTTON_Y,
+        "toggleOSD", brls::ControllerButton::BUTTON_START,
         [this](brls::View* view) -> bool {
             // 拖拽进度时不要影响显示 OSD
             if (!seeking_range) this->toggleOSD();
@@ -83,7 +83,7 @@ VideoView::VideoView(jellyfin::MediaItem& item) : itemId(item.Id) {
     /// 播放/暂停 按钮
     this->btnToggle->registerClickAction([this](...) { return this->togglePlayback(); });
     this->btnToggle->addGestureRecognizer(new brls::TapGestureRecognizer(this->btnToggle));
-    this->registerAction("toggle", brls::ControllerButton::BUTTON_START, [this](...) {
+    this->registerAction("toggle", brls::ControllerButton::BUTTON_Y, [this](...) {
         return this->togglePlayback();
     }, true);
 
