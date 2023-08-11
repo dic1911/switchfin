@@ -66,7 +66,7 @@ VideoView::VideoView() {
         false, true);
 
     this->registerAction(
-        "toggleOSD", brls::BUTTON_Y,
+        "toggleOSD", brls::ControllerButton::BUTTON_START,
         [this](brls::View* view) -> bool {
             // 拖拽进度时不要影响显示 OSD
             if (!this->seekingRange) this->toggleOSD();
@@ -231,7 +231,7 @@ VideoView::VideoView() {
         return true;
     });
     this->btnToggle->addGestureRecognizer(new brls::TapGestureRecognizer(this->btnToggle));
-    this->registerAction("toggle", brls::ControllerButton::BUTTON_START, [this](...) {
+    this->registerAction("toggle", brls::ControllerButton::BUTTON_Y, [this](...) {
         return this->togglePlayback();
     }, true);
 
