@@ -45,6 +45,7 @@ std::string AppVersion::getDeviceName() {
     name.resize(nSize);
     WideCharToMultiByte(CP_UTF8, 0, buf.data(), nSize, name.data(), name.size(), nullptr, nullptr);
 #else
+    name = getPlatform();
     gethostname(name.data(), name.size());
 #endif
     return std::string(name.data());
