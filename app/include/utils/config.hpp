@@ -13,14 +13,13 @@ public:
     static std::string getVersion();
     static std::string getPlatform();
     static std::string getDeviceName();
+    static std::string getPackageName();
+    static std::string getCommit();
     static bool needUpdate(std::string latestVersion);
     static void checkUpdate(int delay = 2000, bool showUpToDateDialog = false);
 
     inline static std::shared_ptr<std::atomic_bool> updating = std::make_shared<std::atomic_bool>(true);
     inline static std::string git_repo = "dragonflylee/switchfin";
-    static std::string git_commit;
-    static std::string git_tag;
-    static std::string pkg_name;
 };
 
 struct AppUser {
@@ -50,6 +49,7 @@ public:
         APP_LANG,
         KEYMAP,
         TRANSCODEC,
+        FORCE_DIRECTPLAY,
         MAXBITRATE,
         OSD_ON_TOGGLE,
         PLAYER_BOTTOM_BAR,
@@ -100,11 +100,12 @@ public:
     inline const Option& getOptions(const Item item) const { return settingMap[item]; }
 
     bool addServer(const AppServer& s);
-    bool addUser(const AppUser& u);
+    bool addUser(const AppUser& u, const std::string& url);
+    const std::string& getDeviceId() { return this->device; }
+    std::string getDevice(const std::string& token = "");
     const AppUser& getUser() const { return this->user; }
     const std::string& getUrl() const { return this->server_url; }
-    const std::string& getDevice() const { return this->device; }
-    const std::vector<AppServer>& getServers() const { return this->servers; }
+    const std::vector<AppServer> getServers() const;
 
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(AppConfig, user_id, server_url, device, users, servers, setting);
 

@@ -1,7 +1,7 @@
 #include "api/analytics.hpp"
 #include "api/http.hpp"
 #include "utils/config.hpp"
-#include <borealis/core/thread.hpp>
+#include "utils/thread.hpp"
 
 namespace analytics {
 

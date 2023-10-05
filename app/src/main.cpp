@@ -28,18 +28,9 @@
 using namespace brls::literals;  // for _i18n
 
 int main(int argc, char* argv[]) {
-    // Enable recording for Twitter memes
-#ifdef __SWITCH__
-    appletInitializeGamePlayRecording();
-    appletSetWirelessPriorityMode(AppletWirelessPriorityMode_OptimizedForWlan);
-#endif
     // We recommend to use INFO for real apps
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-v") == 0) brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
-#ifdef __SWITCH__
-        else if (strcmp(argv[i], "-l") == 0)
-            nxlinkStdio();
-#endif
     }
 
     // Load cookies and settings
@@ -54,7 +45,7 @@ int main(int argc, char* argv[]) {
     // Return directly to the desktop when closing the application (only for NX)
     brls::Application::getPlatform()->exitToHomeMode(true);
 
-    brls::Application::createWindow(fmt::format("{} for {}", AppVersion::pkg_name, AppVersion::getPlatform()));
+    brls::Application::createWindow(fmt::format("{} for {}", AppVersion::getPackageName(), AppVersion::getPlatform()));
 
     // Have the application register an action on every activity that will quit when you press BUTTON_START
     brls::Application::setGlobalQuit(false);
@@ -109,7 +100,3 @@ int main(int argc, char* argv[]) {
     // Exit
     return EXIT_SUCCESS;
 }
-
-#ifdef __WINRT__
-#include <borealis/core/main.hpp>
-#endif

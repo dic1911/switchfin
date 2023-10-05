@@ -30,7 +30,25 @@ if (MPV_NO_FB)
     list(APPEND APP_PLATFORM_OPTION -DMPV_NO_FB)
 endif()
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/deps.cmake)
+if (NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE)
+elseif (CMAKE_BUILD_TYPE STREQUAL Debug)
+    list(APPEND APP_PLATFORM_OPTION -D_DEBUG -D_GLIBCXX_ASSERTIONS)
+endif()
+
+# Add git info
+if (NOT DEFINED GIT_TAG_SHORT)
+    execute_process(COMMAND git rev-parse --short HEAD
+        TIMEOUT 5 OUTPUT_VARIABLE GIT_TAG_SHORT
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+endif ()
+
+if (NOT DEFINED VERSION_BUILD)
+    execute_process(COMMAND git rev-list --count --all
+        TIMEOUT 5 OUTPUT_VARIABLE VERSION_BUILD
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+endif ()
+message(STATUS "git commit ${GIT_TAG_SHORT} build ${VERSION_BUILD}")
 
 # toolchain
 include(${BOREALIS_LIBRARY}/cmake/toolchain.cmake)
@@ -38,8 +56,8 @@ include(${BOREALIS_LIBRARY}/cmake/toolchain.cmake)
 # project info
 project(Switchfin)
 set(VERSION_MAJOR "0")
-set(VERSION_MINOR "2")
-set(VERSION_ALTER "0")
+set(VERSION_MINOR "3")
+set(VERSION_ALTER "2")
 set(PROJECT_TITLEID "010ff000ffff0003")
 set(PROJECT_AUTHOR "dragonflylee")
 set(PROJECT_ICON ${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/icon.jpg)
@@ -74,6 +92,11 @@ endif ()
 # build borealis and other third party libraries
 add_subdirectory(library)
 
+if (MINGW)
+    set(ZLIB_USE_STATIC_LIBS ON)
+    set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++ -static")
+endif ()
+
 if (USE_SYSTEM_CURL)
     find_package(CURL REQUIRED)
 else ()
@@ -83,19 +106,21 @@ else ()
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
     if (WIN32)
-        set(CURL_USE_SCHANNEL ON CACHE INTERNAL "" FORCE)
+        set(CURL_USE_SCHANNEL ON)
     else ()
         find_package(OpenSSL REQUIRED)
-        set(CURL_USE_OPENSSL ON CACHE INTERNAL "" FORCE)
+        set(CURL_USE_OPENSSL ON)
     endif()
-    set(HTTP_ONLY ON CACHE INTERNAL "" FORCE)
-    set(BUILD_CURL_EXE OFF CACHE INTERNAL "" FORCE)
-    set(BUILD_TESTING OFF CACHE INTERNAL "" FORCE)
-    set(BUILD_SHARED_LIBS OFF CACHE INTERNAL "" FORCE)
-    set(USE_LIBIDN2 OFF CACHE INTERNAL "" FORCE)
-    set(CURL_USE_LIBSSH2 OFF CACHE INTERNAL "" FORCE)
-    set(CURL_USE_LIBPSL OFF CACHE INTERNAL "" FORCE)
-    set(CURL_DISABLE_PROGRESS_METER ON CACHE INTERNAL "" FORCE)
+    set(HTTP_ONLY ON)
+    set(BUILD_CURL_EXE OFF)
+    set(BUILD_TESTING OFF)
+    set(BUILD_SHARED_LIBS OFF)
+    set(USE_LIBIDN2 OFF)
+    set(USE_WIN32_IDN ON)
+    set(CURL_USE_LIBSSH2 OFF)
+    set(CURL_USE_LIBPSL OFF)
+    set(CURL_DISABLE_PROGRESS_METER ON)
+    set(ZLIB_USE_STATIC_LIBS ON)
     FetchContent_MakeAvailable(curl)
 endif ()
 list(APPEND APP_PLATFORM_LIB CURL::libcurl)
@@ -111,32 +136,9 @@ find_package(Threads REQUIRED)
 list(APPEND APP_PLATFORM_LIB ${CMAKE_THREAD_LIBS_INIT})
 
 if (PLATFORM_DESKTOP)
-    find_package(MPV)
-    if (MPV_FOUND)
-        list(APPEND APP_PLATFORM_INCLUDE ${MPV_INCLUDE_DIR})
-        list(APPEND APP_PLATFORM_LIB ${MPV_LIBRARY})
-    elseif (MINGW)
-        include(ExternalProject)
-        ExternalProject_Add(mpv
-            URL https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20230831/mpv-dev-x86_64-20230831-git-edd7189.7z
-            URL_HASH SHA256=1d6b964e97faecad291fe5cc128a3ccf04138d3a0b2ff0635290060ebaf98d34
-            UPDATE_COMMAND ""
-            CONFIGURE_COMMAND ""
-            BUILD_COMMAND ""
-            BUILD_IN_SOURCE TRUE
-            DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-            INSTALL_COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/libmpv-2.dll ${CMAKE_BINARY_DIR}
-        )
-        ExternalProject_Get_property(mpv SOURCE_DIR)
-        add_dependencies(borealis mpv)
-        list(APPEND APP_PLATFORM_INCLUDE ${SOURCE_DIR}/include)
-        list(APPEND APP_PLATFORM_LIB ${SOURCE_DIR}/libmpv.dll.a)
-    else ()
-        message(FATAL_ERROR "Missing library MPV")
-    endif ()
-    if (MINGW)
-        list(APPEND APP_PLATFORM_LIB "-static-libgcc -static-libstdc++")
-    endif ()
+    find_package(MPV REQUIRED)
+    list(APPEND APP_PLATFORM_INCLUDE ${MPV_INCLUDE_DIR})
+    list(APPEND APP_PLATFORM_LIB ${MPV_LIBRARY})
 else ()
     # Used for Cross Compile such as NintendoSwitch
     # If dependent files cannot be found, environment variables can be set before executing the cmake command:
@@ -172,8 +174,8 @@ target_compile_options(${PROJECT_NAME} PRIVATE -ffunction-sections -fdata-sectio
 target_link_libraries(${PROJECT_NAME} PRIVATE borealis lunasvg ${APP_PLATFORM_LIB})
 target_link_options(${PROJECT_NAME} PRIVATE ${APP_PLATFORM_LINK_OPTION})
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    APP_VERSION=v${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_ALTER}
-    BUILD_TAG_VERSION=${GIT_TAG_VERSION}
+    APP_VERSION=${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_ALTER}
+    APP_BUILD=${VERSION_BUILD}
     BUILD_TAG_SHORT=${GIT_TAG_SHORT}
     BUILD_PACKAGE_NAME=${CMAKE_PROJECT_NAME}
 )

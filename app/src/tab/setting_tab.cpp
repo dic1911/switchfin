@@ -34,9 +34,15 @@ public:
     SettingAbout() {
         this->inflateFromXMLRes("xml/view/setting_about.xml");
 
-        this->labelTitle->setText(AppVersion::pkg_name);
-        this->labelVersion->setText(AppVersion::getVersion());
+        this->labelTitle->setText(AppVersion::getPackageName());
+        this->labelVersion->setText(fmt::format("v{}-{}", AppVersion::getVersion(), AppVersion::getCommit()));
         this->labelGithub->setText("https://github.com/" + AppVersion::git_repo);
+        this->btnGithub->registerClickAction([this](...){
+            std::string url = this->labelGithub->getFullText();
+            brls::Application::getPlatform()->openBrowser(url);
+            return true;
+        });
+        this->btnGithub->addGestureRecognizer(new brls::TapGestureRecognizer(this->btnGithub));
 
         auto& mpv = MPVCore::instance();
         this->labelMPV->setText(fmt::format("ffmpeg/{} {}", mpv.ffmpeg_version, mpv.mpv_version));
@@ -52,6 +58,7 @@ private:
     BRLS_BIND(brls::Label, labelGithub, "setting/about/github");
     BRLS_BIND(brls::Label, labelMPV, "setting/about/mpv");
     BRLS_BIND(brls::Label, labelCurl, "setting/about/curl");
+    BRLS_BIND(brls::Box, btnGithub, "setting/box/github");
 };
 
 SettingTab::SettingTab() {
@@ -73,7 +80,6 @@ void SettingTab::onCreate() {
 
 /// Hardware decode
 #ifdef __SWITCH__
-    btnHWDEC->setVisibility(brls::Visibility::GONE);
     btnOverClock->init(
         "main/setting/others/overclock"_i18n, conf.getItem(AppConfig::OVERCLOCK, false), [&conf](bool value) {
             SwitchSys::setClock(value);
@@ -81,13 +87,20 @@ void SettingTab::onCreate() {
         });
 #else
     btnOverClock->setVisibility(brls::Visibility::GONE);
+#endif
+
     btnHWDEC->init("main/setting/playback/hwdec"_i18n, MPVCore::HARDWARE_DEC, [&conf](bool value) {
         if (MPVCore::HARDWARE_DEC == value) return;
         MPVCore::HARDWARE_DEC = value;
         MPVCore::instance().restart();
         conf.setItem(AppConfig::PLAYER_HWDEC, value);
     });
-#endif
+
+    btnDirectPlay->init("main/setting/playback/force_directplay"_i18n, MPVCore::FORCE_DIRECTPLAY, [&conf](bool value) {
+        if (MPVCore::FORCE_DIRECTPLAY == value) return;
+        MPVCore::FORCE_DIRECTPLAY = value;
+        conf.setItem(AppConfig::FORCE_DIRECTPLAY, value);
+    });
 
     auto& codecOption = conf.getOptions(AppConfig::TRANSCODEC);
     selectorCodec->init("main/setting/playback/transcodec"_i18n, {"AVC/H264", "HEVC/H265", "AV1"},

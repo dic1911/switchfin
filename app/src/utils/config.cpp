@@ -27,9 +27,11 @@ constexpr uint32_t MINIMUM_WINDOW_HEIGHT = 360;
 
 std::unordered_map<AppConfig::Item, AppConfig::Option> AppConfig::settingMap = {
     {APP_THEME, {"app_theme", {"auto", "light", "dark"}}},
-    {APP_LANG, {"app_lang", {brls::LOCALE_AUTO, brls::LOCALE_EN_US, brls::LOCALE_ZH_HANS, brls::LOCALE_ZH_HANT, brls::LOCALE_DE}}},
+    {APP_LANG, {"app_lang", {brls::LOCALE_AUTO, brls::LOCALE_EN_US, brls::LOCALE_ZH_HANS, brls::LOCALE_ZH_HANT,
+                                brls::LOCALE_DE}}},
     {KEYMAP, {"keymap", {"xbox", "ps", "keyboard"}}},
     {TRANSCODEC, {"transcodec", {"h264", "hevc", "av1"}}},
+    {FORCE_DIRECTPLAY, {"force_directplay"}},
     {MAXBITRATE, {"max_bitrate", {"20Mbps", "40Mbps", "80Mbps", "160Mbps"}, {20000000, 40000000, 80000000, 160000000}}},
     {FULLSCREEN, {"fullscreen"}},
     {OSD_ON_TOGGLE, {"osd_on_toggle"}},
@@ -64,8 +66,9 @@ void AppConfig::init() {
     MPVCore::BOTTOM_BAR = this->getItem(PLAYER_BOTTOM_BAR, true);
     MPVCore::OSD_ON_TOGGLE = this->getItem(PLAYER_BOTTOM_BAR, true);
 
-    // 初始化是否使用硬件加速 （仅限非switch设备）
+    // 初始化是否使用硬件加速
     MPVCore::HARDWARE_DEC = this->getItem(PLAYER_HWDEC, true);
+    MPVCore::FORCE_DIRECTPLAY = this->getItem(FORCE_DIRECTPLAY, false);
     MPVCore::SEEKING_STEP = this->getItem(PLAYER_SEEKING_STEP, 15);
     MPVCore::VIDEO_CODEC = this->getItem(TRANSCODEC, settingMap[TRANSCODEC].options.back());
     MPVCore::MAX_BITRATE[0] = this->getItem(MAXBITRATE, settingMap[MAXBITRATE].values.back());
@@ -143,8 +146,8 @@ void AppConfig::init() {
         }
     }
 
-    brls::Logger::info(
-        "init {} {} device {} from {}", AppVersion::getPlatform(), AppVersion::getVersion(), this->device, path);
+    brls::Logger::info("init {} v{}-{} device {} from {}", AppVersion::getPlatform(), AppVersion::getVersion(),
+        AppVersion::getCommit(), this->device, path);
 }
 
 void AppConfig::save() {
@@ -164,15 +167,11 @@ void AppConfig::save() {
 bool AppConfig::checkLogin() {
     for (auto& u : this->users) {
         if (u.id == this->user_id) {
-            this->user = u;
-            HTTP::Header header = {
-                fmt::format("X-Emby-Authorization: MediaBrowser Client=\"{}\", Device=\"{}\", DeviceId=\"{}\", "
-                            "Version=\"{}\", Token=\"{}\"",
-                    AppVersion::pkg_name, AppVersion::getDeviceName(), this->getDevice(), AppVersion::getVersion(),
-                    u.access_token)};
-            const long timeout = getItem(AppConfig::REQUEST_TIMEOUT, default_timeout);
+            HTTP::Header header = {this->getDevice(u.access_token)};
+            const long timeout = this->getItem(AppConfig::REQUEST_TIMEOUT, default_timeout);
             try {
-                HTTP::get(getUrl() + jellyfin::apiInfo, header, HTTP::Timeout{timeout});
+                HTTP::get(this->server_url + jellyfin::apiInfo, header, HTTP::Timeout{timeout});
+                this->user = u;
                 return true;
             } catch (const std::exception& ex) {
                 brls::Logger::warning("AppConfig checkLogin: {}", ex.what());
@@ -185,13 +184,13 @@ bool AppConfig::checkLogin() {
 
 std::string AppConfig::configDir() {
 #if __SWITCH__
-    return fmt::format("sdmc:/switch/{}", AppVersion::pkg_name);
+    return fmt::format("sdmc:/switch/{}", AppVersion::getPackageName());
 #elif _WIN32
-    return fmt::format("{}\\{}", getenv("LOCALAPPDATA"), AppVersion::pkg_name);
+    return fmt::format("{}\\{}", getenv("LOCALAPPDATA"), AppVersion::getPackageName());
 #elif __linux__
-    return fmt::format("{}/.config/{}", getenv("HOME"), AppVersion::pkg_name);
+    return fmt::format("{}/.config/{}", getenv("HOME"), AppVersion::getPackageName());
 #elif __APPLE__
-    return fmt::format("{}/Library/Application Support/{}", getenv("HOME"), AppVersion::pkg_name);
+    return fmt::format("{}/Library/Application Support/{}", getenv("HOME"), AppVersion::getPackageName());
 #endif
 }
 
@@ -251,7 +250,7 @@ bool AppConfig::addServer(const AppServer& s) {
     return found;
 }
 
-bool AppConfig::addUser(const AppUser& u) {
+bool AppConfig::addUser(const AppUser& u, const std::string& url) {
     bool found = false;
     for (auto& o : this->users) {
         if (o.id == u.id) {
@@ -264,8 +263,33 @@ bool AppConfig::addUser(const AppUser& u) {
     }
     if (!found) this->users.push_back(u);
 
+    this->server_url = url;
     this->user_id = u.id;
     this->user = u;
     this->save();
     return found;
+}
+
+std::string AppConfig::getDevice(const std::string& token) {
+    if (token.empty())
+        return fmt::format(
+            "X-Emby-Authorization: MediaBrowser Client=\"{}\", Device=\"{}\", DeviceId=\"{}\", Version=\"{}\"",
+            AppVersion::getPackageName(), AppVersion::getDeviceName(), this->device, AppVersion::getVersion());
+    else
+        return fmt::format(
+            "X-Emby-Authorization: MediaBrowser Client=\"{}\", Device=\"{}\", DeviceId=\"{}\", Version=\"{}\", "
+            "Token=\"{}\"",
+            AppVersion::getPackageName(), AppVersion::getDeviceName(), this->device, AppVersion::getVersion(), token);
+}
+
+const std::vector<AppServer> AppConfig::getServers() const {
+    std::vector<AppServer> list(this->servers);
+    for (auto& u : this->users) {
+        for (auto& s : list) {
+            if (u.server_id == s.id) {
+                s.users.push_back(u);
+            }
+        }
+    }
+    return list;
 }

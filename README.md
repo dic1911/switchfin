@@ -5,9 +5,16 @@
 Switchfin is third-party PC player for Jellyfin that provides a native user interface to browse and play movies and series.
 <br>
 
-[![build](https://github.com/dragonflylee/switchfin/actions/workflows/build.yaml/badge.svg)](https://github.com/dragonflylee/switchfin/actions/workflows/build.yaml) [![download](https://img.shields.io/github/downloads/dragonflylee/switchfin/latest/total?label=Downloads)](https://github.com/dragonflylee/switchfin/releases/latest) ![NS](https://img.shields.io/badge/-Nintendo%20Switch-e4000f?style=flat&logo=Nintendo%20Switch) ![MS](https://img.shields.io/badge/-Windows%2010-357ec7?style=flat&logo=Windows) ![mac](https://img.shields.io/badge/-macOS%2010.15-black?style=flat&logo=Apple) ![Linux](https://img.shields.io/badge/-Linux-lightgrey?style=flat&logo=Linux)
+[![build](https://github.com/dragonflylee/switchfin/actions/workflows/build.yaml/badge.svg)](https://github.com/dragonflylee/switchfin/actions/workflows/build.yaml) [![download](https://img.shields.io/github/downloads/dragonflylee/switchfin/latest/total?label=Downloads)](https://github.com/dragonflylee/switchfin/releases/latest) [![nightly](https://img.shields.io/badge/nightly-build-green)](https://nightly.link/dragonflylee/switchfin/workflows/build.yaml/dev)
 
 **This project is in its early stages so expect bugs.**
+
+## Screenshots
+| Home                                | Library                             |
+|-------------------------------------|-------------------------------------|
+| ![Home](images/home.jpg) | ![Library](images/library.jpg) | 
+|Search                            | Episode                             |
+![Search](images/search.jpg) | ![Episode](images/episode.jpg) |
 
 
 ## Features
@@ -44,14 +51,15 @@ sudo dkp-pacman -S switch-glfw switch-libwebp switch-cmake switch-curl devkitA64
 cmake -B build_switch -DPLATFORM_SWITCH=ON -DBUILTIN_NSP=ON
 make -C build_switch Switchfin.nro -j$(nproc)
 # for debug
-nxlink -a 192.168.3.97 -p Switchfin/Switchfin.nro -s Switchfin.nro --args -l 
+nxlink -a <YOUR IP> -p Switchfin/Switchfin.nro -s Switchfin.nro --args -l 
 ```
 
 ### Building for MinGW64
 
 ```bash
-cmake -B build_mingw -G 'MinGW Makefiles' -DPLATFORM_DESKTOP=ON
-mingw32-make -C build_mingw -j$(nproc)
+pacman -S ${MINGW_PACKAGE_PREFIX}-gcc ${MINGW_PACKAGE_PREFIX}-ninja ${MINGW_PACKAGE_PREFIX}-cmake
+cmake -B build_mingw -DPLATFORM_DESKTOP=ON
+cmake --build build_mingw
 ```
 
 ## Thanks to

@@ -49,14 +49,29 @@ static void *get_proc_address(void *unused, const char *name) {
 #endif
 
 void MPVCore::on_update(void *self) {
-    brls::sync([]() { mpv_render_context_update(MPVCore::instance().getContext()); });
+    MPVCore *mpv = reinterpret_cast<MPVCore *>(self);
+    brls::sync([mpv]() { mpv_render_context_update(mpv->getContext()); });
 }
 
 void MPVCore::on_wakeup(void *self) {
-    brls::sync([]() { MPVCore::instance().eventMainLoop(); });
+    MPVCore *mpv = reinterpret_cast<MPVCore *>(self);
+    brls::sync([mpv]() { mpv->eventMainLoop(); });
 }
 
-MPVCore::MPVCore() { this->init(); }
+MPVCore::MPVCore() {
+    this->init();
+    // Destroy mpv when application exit
+    brls::Application::getExitEvent()->subscribe([this]() {
+        this->clean();
+#ifdef MPV_SW_RENDER
+        if (this->pixels) {
+            free(this->pixels);
+            this->pixels = nullptr;
+            this->mpv_params[3].data = nullptr;
+        }
+#endif
+    });
+}
 
 void MPVCore::init() {
     this->mpv = mpv_create();
@@ -64,16 +79,17 @@ void MPVCore::init() {
         brls::fatal("Error Create mpv Handle");
     }
 
+    auto &conf = AppConfig::instance();
+
     // misc
     mpv_set_option_string(mpv, "config", "yes");
-    mpv_set_option_string(mpv, "config-dir", AppConfig::instance().configDir().c_str());
-    mpv_set_option_string(mpv, "sub-fonts-dir", AppConfig::instance().configDir().c_str());
+    mpv_set_option_string(mpv, "config-dir", conf.configDir().c_str());
     mpv_set_option_string(mpv, "ytdl", "no");
 #ifdef _DEBUG
     mpv_set_option_string(mpv, "terminal", "yes");
 #endif
     mpv_set_option_string(mpv, "audio-channels", "stereo");
-    mpv_set_option_string(mpv, "referrer", AppConfig::instance().getUrl().c_str());
+    mpv_set_option_string(mpv, "referrer", conf.getUrl().c_str());
     mpv_set_option_string(mpv, "idle", "yes");
     mpv_set_option_string(mpv, "loop-file", "no");
     mpv_set_option_string(mpv, "osd-level", "0");
@@ -99,26 +115,41 @@ void MPVCore::init() {
         mpv_set_option_string(mpv, "cache", "no");
     }
 
-    // hardware decoding
-#ifndef __SWITCH__
-    mpv_set_option_string(mpv, "hwdec", HARDWARE_DEC ? PLAYER_HWDEC_METHOD.c_str() : "no");
-    brls::Logger::info("MPV hardware decode: {}/{}", HARDWARE_DEC, PLAYER_HWDEC_METHOD);
-#endif
-
-    // Making the loading process faster
 #ifdef __SWITCH__
-    mpv_set_option_string(mpv, "vd-lavc-dr", "no");
-    mpv_set_option_string(mpv, "vd-lavc-threads", "4");
-#endif
-    mpv_set_option_string(mpv, "demuxer-lavf-analyzeduration", "0.1");
-    mpv_set_option_string(mpv, "demuxer-lavf-probe-info", "nostreams");
-    mpv_set_option_string(mpv, "demuxer-lavf-probescore", "24");
+    // Making the loading process faster
+    mpv_set_option_string(mpv, "vd-lavc-dr", "yes");
+    mpv_set_option_string(mpv, "vd-lavc-threads", "3");
 
-    // log
-    // mpv_set_option_string(mpv, "msg-level", "ffmpeg=trace");
-    // mpv_set_option_string(mpv, "msg-level", "all=no");
+    // Set default subfont
+    std::string locale = brls::Application::getPlatform()->getLocale();
+    if (locale == brls::LOCALE_ZH_HANS)
+        mpv_set_option_string(mpv, "sub-font", "nintendo_udsg-r_org_zh-cn_003");
+    else if (locale == brls::LOCALE_ZH_HANT)
+        mpv_set_option_string(mpv, "sub-font", "nintendo_udjxh-db_zh-tw_003");
+    else if (locale == brls::LOCALE_Ko)
+        mpv_set_option_string(mpv, "sub-font", "nintendo_udsg-r_ko_003");
+#endif
+
+    // hardware decoding
+    if (HARDWARE_DEC) {
+#ifdef __SWITCH__
+        mpv_set_option_string(mpv, "hwdec", "tx1-copy");
+        brls::Logger::info("MPV hardware decode: {}", "tx1-copy");
+#elif defined(__PSV__)
+        mpv_set_option_string(mpv, "hwdec", "vita-copy");
+        brls::Logger::info("MPV hardware decode: vita-copy");
+#else
+        mpv_set_option_string(mpv, "hwdec", PLAYER_HWDEC_METHOD.c_str());
+        brls::Logger::info("MPV hardware decode: {}", PLAYER_HWDEC_METHOD);
+#endif
+    } else {
+        mpv_set_option_string(mpv, "hwdec", "no");
+    }
 
 #ifdef _DEBUG
+    // log
+    mpv_set_option_string(mpv, "msg-level", "ffmpeg=trace");
+    //  mpv_set_option_string(mpv, "msg-level", "all=no");
     mpv_set_option_string(mpv, "msg-level", "all=v");
 #endif
 
@@ -180,7 +211,7 @@ void MPVCore::init() {
     }
     mpv_free_node_contents(&node);
 
-    command_str("set audio-client-name {}", AppVersion::pkg_name);
+    command_str("set audio-client-name {}", AppVersion::getPackageName());
     // set event callback
     mpv_set_wakeup_callback(mpv, on_wakeup, this);
     // set render callback
@@ -207,17 +238,6 @@ void MPVCore::init() {
             AUTO_PLAY = false;
         }
     });
-}
-
-MPVCore::~MPVCore() {
-    this->clean();
-#ifdef MPV_SW_RENDER
-    if (pixels) {
-        free(pixels);
-        pixels = nullptr;
-        mpv_params[3].data = nullptr;
-    }
-#endif
 }
 
 void MPVCore::clean() {
@@ -376,9 +396,13 @@ void MPVCore::initializeGL() {
 #endif
 }
 
-void MPVCore::command_str(const char *args) { check_error(mpv_command_string(mpv, args)); }
+void MPVCore::command_str(const char *args) {
+    if (this->mpv) check_error(mpv_command_string(mpv, args));
+}
 
-void MPVCore::command_async(const char **args) { check_error(mpv_command_async(mpv, 0, args)); }
+void MPVCore::command_async(const char **args) {
+    if (this->mpv) check_error(mpv_command_async(mpv, 0, args));
+}
 
 void MPVCore::setFrameSize(brls::Rect rect) {
 #ifdef MPV_SW_RENDER
@@ -404,10 +428,9 @@ void MPVCore::setFrameSize(brls::Rect rect) {
         mpv_params[3].data = pixels;
     }
 
-    if (nvg_image) nvgDeleteImage(brls::Application::getNVGContext(), nvg_image);
-    nvg_image = nvgCreateImageRGBA(
-        brls::Application::getNVGContext(), drawWidth, drawHeight, mpvImageFlags, (const unsigned char *)pixels);
-    brls::Logger::error("=======> {}/{}", drawWidth, drawHeight);
+    auto vg = brls::Application::getNVGContext();
+    if (nvg_image) nvgDeleteImage(vg, nvg_image);
+    nvg_image = nvgCreateImageRGBA(vg, drawWidth, drawHeight, mpvImageFlags, (const unsigned char *)pixels);
 
     sw_size[0] = drawWidth;
     sw_size[1] = drawHeight;
@@ -533,7 +556,7 @@ void MPVCore::openglDraw(brls::Rect rect, float alpha) {
     }
 }
 
-std::string MPVCore::getCacheSpeed() {
+std::string MPVCore::getCacheSpeed() const {
     if (cache_speed >> 20 > 0) {
         return fmt::format("{:.2f} MB/s", (cache_speed >> 10) / 1024.0f);
     } else if (cache_speed >> 10 > 0) {
@@ -626,7 +649,6 @@ void MPVCore::eventMainLoop() {
             } else if (strcmp(prop->name, "percent-pos") == 0) {
                 // 视频进度更新（百分比）
                 this->percent_pos = *(double *)prop->data;
-                ;
             } else if (strcmp(prop->name, "speed") == 0) {
                 // 倍速信息
                 this->video_speed = *(double *)prop->data;
@@ -755,7 +777,7 @@ double MPVCore::getPlaybackTime() {
     return this->playback_time;
 }
 void MPVCore::disableDimming(bool disable) {
-    brls::Application::getPlatform()->disableScreenDimming(disable, "Playing video", AppVersion::pkg_name);
+    brls::Application::getPlatform()->disableScreenDimming(disable, "Playing video", AppVersion::getPackageName());
     brls::Application::setAutomaticDeactivation(!disable);
 }
 

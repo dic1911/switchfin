@@ -128,7 +128,45 @@ VideoView::VideoView(jellyfin::MediaItem& item) : itemId(item.Id) {
         },
         true);
 
-    this->playMedia(item.UserData.PlaybackPositionTicks);
+    this->btnVideoChapter->registerClickAction([this](...) {
+        if (this->chapters.empty()) return false;
+
+        int selectedChapter = -1;
+        time_t ticks = MPVCore::instance().video_progress * jellyfin::PLAYTICKS;
+        std::vector<std::string> values;
+        for (auto& item : this->chapters) {
+            values.push_back(item.Name);
+            if (item.StartPositionTicks <= ticks) selectedChapter++;
+        }
+
+        brls::Dropdown* dropdown = new brls::Dropdown(
+            "main/player/chapter"_i18n, values,
+            [this](int selected) {
+                int64_t offset = this->chapters[selected].StartPositionTicks;
+                MPVCore::instance().command_str("seek {} absolute", offset / jellyfin::PLAYTICKS);
+            },
+            selectedChapter);
+        brls::Application::pushActivity(new brls::Activity(dropdown));
+        return true;
+    });
+    this->btnVideoChapter->addGestureRecognizer(new brls::TapGestureRecognizer(this->btnVideoChapter));
+
+    // request mediainfo
+    ASYNC_RETAIN
+    jellyfin::getJSON(
+        [ASYNC_TOKEN](const jellyfin::MediaItem& r) {
+            ASYNC_RELEASE
+            this->chapters = r.Chapters;
+            this->playMedia(r.UserData.PlaybackPositionTicks);
+        },
+        [ASYNC_TOKEN](const std::string& ex) {
+            ASYNC_RELEASE
+            auto dialog = new brls::Dialog(ex);
+            dialog->addButton(
+                "hints/ok"_i18n, []() { brls::Application::popActivity(brls::TransitionAnimation::NONE, &onDismiss); });
+            dialog->open();
+        },
+        jellyfin::apiUserItem, AppConfig::instance().getUser().id, this->itemId);
 }
 
 VideoView::~VideoView() {
@@ -171,7 +209,8 @@ void VideoView::requestSeeking() {
 }
 
 bool VideoView::showSetting() {
-    brls::View* setting = new PlayerSetting(this->itemSource);
+    brls::View* setting = new PlayerSetting(
+        this->itemSource, [this]() { this->playMedia(MPVCore::instance().playback_time * jellyfin::PLAYTICKS); });
     brls::Application::pushActivity(new brls::Activity(setting));
     // 手动将焦点赋给设置页面
     brls::sync([setting]() { brls::Application::giveFocus(setting); });
@@ -213,10 +252,9 @@ void VideoView::draw(NVGcontext* vg, float x, float y, float w, float h, brls::S
 
     // draw video profile
     if (profile->getVisibility() == brls::Visibility::VISIBLE) {
-        static time_t last = current;
-        if (current - last > 2) {
+        if (current - this->profileLastShowTime > 2) {
             profile->update();
-            last = current;
+            this->profileLastShowTime = current;
         }
         profile->frame(ctx);
     }
@@ -290,6 +328,7 @@ bool VideoView::playNext(int off) {
 
     auto item = this->showEpisodes.at(this->itemIndex);
     this->itemId = item.Id;
+    this->chapters = item.Chapters;
     this->playMedia(0);
     this->setTitie(fmt::format("S{}E{} - {}", item.ParentIndexNumber, item.IndexNumber, item.Name));
     this->btnBackward->setVisibility(this->itemIndex > 0 ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
@@ -299,45 +338,38 @@ bool VideoView::playNext(int off) {
 }
 
 void VideoView::playMedia(const time_t seekTicks) {
+    this->btnVideoChapter->setVisibility(this->chapters.empty() ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
+
     ASYNC_RETAIN
     jellyfin::postJSON(
         {
             {"UserId", AppConfig::instance().getUser().id},
+            {"MediaSourceId", this->itemId},
+            {"AudioStreamIndex", VideoView::selectedAudio},
             {"SubtitleStreamIndex", VideoView::selectedSubtitle},
+            {"AllowAudioStreamCopy", true},
             {
                 "DeviceProfile",
                 {
                     {"MaxStreamingBitrate", MPVCore::MAX_BITRATE[this->selectedQuality]},
                     {
                         "DirectPlayProfiles",
-                        {
-                            {
-                                {"Container", "mp4,m4v,mkv"},
-                                {"Type", "Video"},
-                                {"VideoCodec", "h264,hevc,av1,vp9"},
-                                {"AudioCodec", "aac,mp3,ac3,eac3,opus"},
-                            },
-                            {
-                                {"Container", "mov"},
-                                {"Type", "Video"},
-                                {"VideoCodec", MPVCore::VIDEO_CODEC},
-                                {"AudioCodec", "aac,mp3,ac3,eac3,opus"},
-                            },
-                        },
+                        {{
+                            {"Type", "Video"},
+#ifdef __SWITCH__
+                            {"VideoCodec", "h264,hevc,av1,vp9"},
+#endif
+                        }},
                     },
                     {
                         "TranscodingProfiles",
-                        {
-                            {
-                                {"Container", "ts"},
-                                {"Type", "Video"},
-                                {"VideoCodec", "h264"},
-                                {"AudioCodec", "aac"},
-                                {"Protocol", "hls"},
-                                {"Context", "Streaming"},
-                                {"BreakOnNonKeyFrames", true},
-                            },
-                        },
+                        {{
+                            {"Container", "ts"},
+                            {"Type", "Video"},
+                            {"VideoCodec", MPVCore::VIDEO_CODEC},
+                            {"AudioCodec", "aac,mp3,ac3,opus"},
+                            {"Protocol", "hls"},
+                        }},
                     },
                     {
                         "SubtitleProfiles",
@@ -345,6 +377,10 @@ void VideoView::playMedia(const time_t seekTicks) {
                             {{"Format", "ass"}, {"Method", "External"}},
                             {{"Format", "ssa"}, {"Method", "External"}},
                             {{"Format", "srt"}, {"Method", "External"}},
+                            {{"Format", "smi"}, {"Method", "External"}},
+                            {{"Format", "sub"}, {"Method", "External"}},
+                            {{"Format", "dvdsub"}, {"Method", "Embed"}},
+                            {{"Format", "pgs"}, {"Method", "Embed"}},
                         },
                     },
                 },
@@ -368,7 +404,7 @@ void VideoView::playMedia(const time_t seekTicks) {
                 if (seekTicks > 0) {
                     ssextra << ",start=" << sec2Time(seekTicks / jellyfin::PLAYTICKS);
                 }
-                if (item.SupportsDirectPlay) {
+                if (item.SupportsDirectPlay || MPVCore::FORCE_DIRECTPLAY) {
                     std::string url = fmt::format(fmt::runtime(jellyfin::apiStream), this->itemId,
                         HTTP::encode_form({
                             {"static", "true"},
@@ -376,14 +412,14 @@ void VideoView::playMedia(const time_t seekTicks) {
                             {"playSessionId", r.PlaySessionId},
                             {"tag", item.ETag},
                         }));
-                    this->playMethod = "DirectPlay";
+                    this->playMethod = jellyfin::methodDirectPlay;
                     mpv.setUrl(svr + url, ssextra.str());
                     this->itemSource = std::move(item);
                     return;
                 }
 
                 if (item.SupportsTranscoding) {
-                    this->playMethod = "Transcode";
+                    this->playMethod = jellyfin::methodTranscode;
                     mpv.setUrl(svr + item.TranscodingUrl, ssextra.str());
                     this->itemSource = std::move(item);
                     return;
@@ -395,7 +431,14 @@ void VideoView::playMedia(const time_t seekTicks) {
                 "hints/ok"_i18n, []() { brls::Application::popActivity(brls::TransitionAnimation::NONE, &onDismiss); });
             dialog->open();
         },
-        nullptr, jellyfin::apiPlayback, this->itemId);
+        [ASYNC_TOKEN](const std::string& ex) {
+            ASYNC_RELEASE
+            auto dialog = new brls::Dialog(ex);
+            dialog->addButton(
+                "hints/ok"_i18n, []() { brls::Application::popActivity(brls::TransitionAnimation::NONE, &onDismiss); });
+            dialog->open();
+        },
+        jellyfin::apiPlayback, this->itemId);
 }
 
 void VideoView::reportStart() {
@@ -480,7 +523,7 @@ void VideoView::registerMpvEvent() {
             }
             for (auto& s : this->itemSource.MediaStreams) {
                 if (s.Type == jellyfin::streamTypeSubtitle) {
-                    if (s.DeliveryUrl.size() > 0 && (s.IsExternal || this->playMethod == "Transcode")) {
+                    if (s.DeliveryUrl.size() > 0 && (s.IsExternal || this->playMethod == jellyfin::methodTranscode)) {
                         mpv.command_str("sub-add '{}{}' auto '{}'", svr, s.DeliveryUrl, s.DisplayTitle);
                     }
                 }

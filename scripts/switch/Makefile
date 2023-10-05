@@ -6,8 +6,6 @@ ifeq ($(strip $(DEVKITPRO)),)
 $(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>/devkitpro")
 endif
 
-include $(DEVKITPRO)/libnx/switch_rules
-
 ifeq ($(OS),Windows_NT)
 MAKEPKG	:=	makepkg
 else
@@ -18,7 +16,7 @@ MAKEPKG	:=	makepkg
 endif
 endif
 
-all: mpv nsp
+all: mpv curl nsp
 
 .PHONY: harfbuzz
 harfbuzz:
@@ -39,6 +37,10 @@ ffmpeg: libass
 mpv: ffmpeg
 	@echo Installing libmpv
 	@cd libmpv; $(MAKEPKG) -c -C -f -i -s --noconfirm; cd ..
+
+.PHONY: curl
+curl:
+	@cd curl; $(MAKEPKG) -c -C -f -i -s --noconfirm; cd ..
 
 .PHONY: nsp
 nsp:
