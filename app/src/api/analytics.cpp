@@ -37,7 +37,7 @@ Analytics::Analytics() {
 
 Analytics::~Analytics() { this->ticker.stop(); }
 
-void Analytics::report(const std::string& event, Params params) {
+void Analytics::report(const std::string& event, nlohmann::json params) {
 }
 
 void Analytics::send() {

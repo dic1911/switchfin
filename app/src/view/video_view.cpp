@@ -232,7 +232,8 @@ VideoView::VideoView() {
     });
     this->btnToggle->addGestureRecognizer(new brls::TapGestureRecognizer(this->btnToggle));
     this->registerAction("toggle", brls::ControllerButton::BUTTON_Y, [this](...) {
-        return this->togglePlayback();
+        MPVCore::instance().togglePlay();
+        return true;
     }, true);
 
     /// OSD 锁定按钮

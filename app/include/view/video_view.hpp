@@ -110,7 +110,6 @@ private:
     void reportStart();
     void reportStop();
     void reportPlay(bool isPaused = false);
-    bool togglePlayback();
 
     void registerMpvEvent();
     void unRegisterMpvEvent();
