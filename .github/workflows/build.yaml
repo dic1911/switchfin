@@ -13,12 +13,12 @@ on:
     - images/*
     - CHANGELOG.md
     - README.md
-    branches: [ dev ]
+    branches: [ dev, mod ]
   pull_request:
     paths-ignore:
     - scripts/mingw64/*/*
     - scripts/switch/*/*
-    branches: [ dev ]
+    branches: [ dev, mod ]
   workflow_dispatch:
     inputs:
       nx:
